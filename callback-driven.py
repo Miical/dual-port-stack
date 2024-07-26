@@ -11,9 +11,10 @@ class StackModel:
         print("push", data)
 
     def commit_pop(self, dut_data):
-        print("pop", dut_data)
+        print("Pop", dut_data)
         model_data = self.stack.pop()
         assert model_data == dut_data, f"The model data {model_data} is not equal to the dut data {dut_data}"
+        print(f"Pass: {model_data} == {dut_data}")
 
 class SinglePortDriver:
     class Status(Enum):
@@ -26,7 +27,7 @@ class SinglePortDriver:
         PUSH_OKAY = 2
         POP_OKAY = 3
 
-    def __init__(self, dut, model, port_dict):
+    def __init__(self, dut, model: StackModel, port_dict):
         self.dut = dut
         self.model = model
         self.port_dict = port_dict
