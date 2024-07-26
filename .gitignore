@@ -1,0 +1,13 @@
+picker*/
+out
+split_verilogs
+.vscode
+**/__pycache__/
+**.pytest_cache/
+*.fst
+*.fst.hier
+*.log
+*.dat
+**/UT_*
+NemuBR/
+report/
