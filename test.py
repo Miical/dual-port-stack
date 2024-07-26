@@ -1,100 +1,116 @@
-import mlvp
 import random
 from UT_dual_port_stack import *
-from mlvp import Bundle, Driver, Monitor, Component, Port
 from enum import Enum
 
-class BusCMD(Enum):
-    PUSH = 0
-    POP = 1
-    PUSH_OKAY = 2
-    POP_OKAY = 3
+class StackModel:
+    def __init__(self):
+        self.stack = []
 
-class BusBundle(Bundle):
-    signals = ['valid', 'ready', 'data', 'cmd']
+    def commit_push(self, data):
+        self.stack.append(data)
+        print("push", data)
 
-rm_stack = []
+    def commit_pop(self, dut_data):
+        print("pop", dut_data)
+        model_data = self.stack.pop()
+        assert model_data == dut_data, f"The model data {model_data} is not equal to the dut data {dut_data}"
 
-class MasterEnv(Component):
-    def __init__(self, bundle: BusBundle):
-        super().__init__()
+class SinglePortDriver:
+    class Status(Enum):
+        IDLE = 0
+        WAIT_REQ_READY = 1
+        WAIT_RESP_VALID = 2
+    class BusCMD(Enum):
+        PUSH = 0
+        POP = 1
+        PUSH_OKAY = 2
+        POP_OKAY = 3
 
-        async def driver_method(bundle: BusBundle, item):
-            cmd, data = item
-            if cmd == "push":
-                bundle.valid.value = True
-                bundle.data.value = data
-                bundle.cmd.value = BusCMD.PUSH.value
+    def __init__(self, dut, model, port_dict):
+        self.dut = dut
+        self.model = model
+        self.port_dict = port_dict
+
+        self.status = self.Status.IDLE
+        self.operation_num = 0
+        self.remaining_delay = 0
+
+    def push(self):
+        self.port_dict["in_valid"].value = 1
+        self.port_dict["in_cmd"].value = self.BusCMD.PUSH.value
+        self.port_dict["in_data"].value = random.randint(0, 2**32-1)
+
+    def pop(self):
+        self.port_dict["in_valid"].value = 1
+        self.port_dict["in_cmd"].value = self.BusCMD.POP.value
+
+    def step_callback(self, cycle):
+        if self.status == self.Status.WAIT_REQ_READY:
+            if self.port_dict["in_ready"].value == 1:
+                self.port_dict["in_valid"].value = 0
+                self.port_dict["out_ready"].value = 1
+                self.status = self.Status.WAIT_RESP_VALID
+
+                if self.port_dict["in_cmd"].value == self.BusCMD.PUSH.value:
+                    self.model.commit_push(self.port_dict["in_data"].value)
+
+        elif self.status == self.Status.WAIT_RESP_VALID:
+            if self.port_dict["out_valid"].value == 1:
+                self.port_dict["out_ready"].value = 0
+                self.status = self.Status.IDLE
+                self.remaining_delay = random.randint(0, 5)
+
+                if self.port_dict["out_cmd"].value == self.BusCMD.POP_OKAY.value:
+                    self.model.commit_pop(self.port_dict["out_data"].value)
+
+        if self.status == self.Status.IDLE:
+            if self.remaining_delay == 0:
+                if self.operation_num < 10:
+                    self.push()
+                elif self.operation_num < 20:
+                    self.pop()
+                else:
+                    return
+
+                self.operation_num += 1
+                self.status = self.Status.WAIT_REQ_READY
             else:
-                bundle.valid.value = True
-                bundle.cmd.value = BusCMD.POP.value
-            await bundle.step()
-            await mlvp.AllValid(bundle.valid, bundle.ready)
-            bundle.valid.value = False
+                self.remaining_delay -= 1
 
-            if cmd == "push":
-                rm_stack.append(data)
+def test_stack(stack):
+    model = StackModel()
 
-        self.driver = Driver(bundle, driver_method=driver_method)
-        self.bundle = bundle
+    port0 = SinglePortDriver(stack, model, {
+        "in_valid": stack.in0_valid,
+        "in_ready": stack.in0_ready,
+        "in_data": stack.in0_data,
+        "in_cmd": stack.in0_cmd,
+        "out_valid": stack.out0_valid,
+        "out_ready": stack.out0_ready,
+        "out_data": stack.out0_data,
+        "out_cmd": stack.out0_cmd,
+    })
 
-    async def main(self):
-        while True:
-            await self.driver.port.put(("push", random.randint(0, 127)))
-            await self.bundle.step(random.randint(1, 10))
-            await self.driver.port.put(("pop", None))
+    port1 = SinglePortDriver(stack, model, {
+        "in_valid": stack.in1_valid,
+        "in_ready": stack.in1_ready,
+        "in_data": stack.in1_data,
+        "in_cmd": stack.in1_cmd,
+        "out_valid": stack.out1_valid,
+        "out_ready": stack.out1_ready,
+        "out_data": stack.out1_data,
+        "out_cmd": stack.out1_cmd,
+    })
 
-class SlaveEnv(Component):
-    def __init__(self, bundle: BusBundle):
-        super().__init__()
+    dut.StepRis(port0.step_callback)
+    dut.StepRis(port1.step_callback)
 
-        async def driver_method(bundle, item):
-            bundle.ready.value = True
-            await bundle.step()
-            await mlvp.AllValid(bundle.valid, bundle.ready)
-
-        self.driver = Driver(bundle, driver_method)
-
-        async def monitor_method(bundle):
-            dict = bundle.as_dict()
-            if dict['cmd'] == BusCMD.POP_OKAY.value:
-                rm_data = rm_stack.pop()
-                # print("actual:", dict['data'], "std:", rm_data)
-                # print(dict)
-                assert dict['data'] == rm_data
-                print(f"Pass: {rm_data} == {dict['data']}")
-            await bundle.step()
-            return dict
-
-        self.monitor = Monitor(bundle, lambda bundle: bundle.valid.value and bundle.ready.value, monitor_method)
-        self.bundle = bundle
-
-    async def main(self):
-        while True:
-            await self.driver.port.put(None)
-            ret = await self.monitor.port.get()
-            assert ret['cmd'] == BusCMD.PUSH_OKAY.value or ret['cmd'] == BusCMD.POP_OKAY.value
-            await self.bundle.step(random.randint(1, 10))
+    dut.Step(200)
 
 
-async def test_stack(dut):
-    mlvp.create_task(mlvp.start_clock(dut))
-    port0_req = BusBundle.from_prefix("in0_").bind(dut)
-    port0_resp = BusBundle.from_prefix("out0_").bind(dut)
-    port1_req = BusBundle.from_prefix("in1_").bind(dut)
-    port1_resp = BusBundle.from_prefix("out1_").bind(dut)
-
-    port0_master_env = MasterEnv(port0_req)
-    port0_slave_env = SlaveEnv(port0_resp)
-    port1_master_env = MasterEnv(port1_req)
-    port1_slave_env = SlaveEnv(port1_resp)
-
-    await mlvp.ClockCycles(dut, 1000)
-
-
-# mlvp.setup_logging(log_level=mlvp.logger.INFO)
-dut = DUTdual_port_stack()
-dut.init_clock("clk")
-mlvp.run(test_stack(dut))
-dut.finalize()
+if __name__ == "__main__":
+    dut = DUTdual_port_stack()
+    dut.init_clock("clk")
+    test_stack(dut)
+    dut.finalize()
 
