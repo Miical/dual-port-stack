@@ -35,19 +35,19 @@ class StackEnv(Env):
 
         return port.out_data.value
 
-    @driver_method(imme_ret=False, match_func=True)
+    @driver_method(imme_ret=False, match_func=True, name_to_match="push")
     async def push_port0(self, data):
         await self.exec_once(self.port0, is_push=True, data=data)
 
-    @driver_method(imme_ret=False, match_func=True)
+    @driver_method(imme_ret=False, match_func=True, name_to_match="push")
     async def push_port1(self, data):
         await self.exec_once(self.port1, is_push=True, data=data)
 
-    @driver_method(imme_ret=False, match_func=True, result_compare=True)
+    @driver_method(imme_ret=False, match_func=True, result_compare=True, name_to_match="pop")
     async def pop_port0(self):
         return await self.exec_once(self.port0, is_push=False)
 
-    @driver_method(imme_ret=False, match_func=True, result_compare=True)
+    @driver_method(imme_ret=False, match_func=True, result_compare=True, name_to_match="pop")
     async def pop_port1(self):
         return await self.exec_once(self.port1, is_push=False)
 
@@ -56,16 +56,10 @@ class StackModel(Model):
         super().__init__()
         self.stack = []
 
-    def push_port0(self, data):
+    def push(self, data):
         self.stack.append(data)
 
-    def push_port1(self, data):
-        self.stack.append(data)
-
-    def pop_port0(self):
-        return self.stack.pop()
-
-    def pop_port1(self):
+    def pop(self):
         return self.stack.pop()
 
 async def test_stack(dut):
