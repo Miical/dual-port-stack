@@ -39,12 +39,18 @@ class SinglePortDriver:
             await self.dut.astep(1)
         self.port_dict["in_valid"].value = 0
 
+        if is_push:
+            self.model.commit_push(self.port_dict["in_data"].value)
+
     async def receive_resp(self):
         self.port_dict["out_ready"].value = 1
         await self.dut.astep(1)
         while self.port_dict["out_valid"].value != 1:
             await self.dut.astep(1)
         self.port_dict["out_ready"].value = 0
+
+        if self.port_dict["out_cmd"].value == self.BusCMD.POP_OKAY.value:
+            self.model.commit_pop(self.port_dict["out_data"].value)
 
     async def exec_once(self, is_push):
         await self.send_req(is_push)
@@ -87,11 +93,8 @@ async def test_stack(stack):
     asyncio.create_task(port1.main())
     await asyncio.create_task(dut.runstep(200))
 
-
-
 if __name__ == "__main__":
     dut = DUTdual_port_stack()
     dut.init_clock("clk")
     asyncio.run(test_stack(dut))
     dut.finalize()
-
