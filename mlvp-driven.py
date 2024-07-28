@@ -20,6 +20,7 @@ class StackEnv(Env):
         self.port1 = port1
 
     async def exec_once(self, port, is_push, data=0):
+        await ClockCycles(port, random.randint(0, 5))
         port.in_valid.value = 1
         port.in_cmd.value = BusCMD.PUSH.value if is_push else BusCMD.POP.value
         port.in_data.value = data
@@ -58,8 +59,8 @@ async def test_stack(dut):
     port1 = StackPortBundle.from_regex("(.*)1(.*)").bind(dut)
     env = StackEnv(port0, port1).attach(StackModel())
 
-    for _ in range(10):
-        for is_push in [True, False]:
+    for is_push in [True, False]:
+        for _ in range(50):
             await env.port0_opt(is_push, random.randint(0, 2**8-1))
             await env.port1_opt(is_push, random.randint(0, 2**8-1))
 
