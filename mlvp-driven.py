@@ -13,12 +13,12 @@ class BusCMD(Enum):
     PUSH_OKAY = 2
     POP_OKAY = 3
 
-class StackEnv(Env):
+class StackAgent(Agent):
     def __init__(self, port):
         super().__init__(monitor_step=port.step)
         self.port = port
 
-    @driver_method(match_func=True, need_compare=True)
+    @driver_method(match_func=True, need_compare=True, sche_order="dut_first")
     async def opt(self, is_push, data=0):
         await ClockCycles(self.port, random.randint(0, 5))
         self.port.in_valid.value = 1
@@ -45,26 +45,23 @@ class StackModel(Model):
         return 0 if is_push else self.stack.pop()
 
 async def test_stack(dut):
-    mlvp.create_task(mlvp.start_clock(dut))
+    mlvp.start_clock(dut)
     port0 = StackPortBundle.from_regex("(.*)0(.*)").bind(dut)
     port1 = StackPortBundle.from_regex("(.*)1(.*)").bind(dut)
 
     model = StackModel()
-    env1 = StackEnv(port0).attach(model)
-    env2 = StackEnv(port1).attach(model)
+    agent1 = StackAgent(port0).attach(model)
+    agent2 = StackAgent(port1).attach(model)
 
-    for is_push in [True, False]:
-        for _ in range(50):
-            await env1.opt(is_push, random.randint(0, 2**8-1))
-            await env2.opt(is_push, random.randint(0, 2**8-1))
-
-    await mlvp.gather(
-        env1.drive_completed(sche_method="before_model"),
-        env2.drive_completed(sche_method="before_model"))
+    async with Executor() as exec:
+        for is_push in [True, False]:
+            for _ in range(50):
+                exec(agent1.opt(is_push, random.randint(0, 2**8-1)))
+                exec(agent2.opt(is_push, random.randint(0, 2**8-1)))
 
 if __name__ == '__main__':
     dut = DUTdual_port_stack()
-    dut.init_clock("clk")
-    mlvp.setup_logging(mlvp.logger.INFO)
+    dut.InitClock("clk")
+    # mlvp.setup_logging(mlvp.logger.INFO)
     mlvp.run(test_stack(dut))
-    dut.finalize()
+    dut.Finish()

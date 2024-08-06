@@ -111,7 +111,7 @@ def test_stack(stack):
 
 if __name__ == "__main__":
     dut = DUTdual_port_stack()
-    dut.init_clock("clk")
+    dut.InitClock("clk")
     test_stack(dut)
-    dut.finalize()
+    dut.Finish()
 

@@ -34,9 +34,9 @@ class SinglePortDriver:
         self.port_dict["in_cmd"].value = self.BusCMD.PUSH.value if is_push else self.BusCMD.POP.value
         self.port_dict["in_data"].value = random.randint(0, 2**8-1)
 
-        await self.dut.astep(1)
+        await self.dut.AStep(1)
         while self.port_dict["in_ready"].value != 1:
-            await self.dut.astep(1)
+            await self.dut.AStep(1)
         self.port_dict["in_valid"].value = 0
 
         if is_push:
@@ -44,9 +44,9 @@ class SinglePortDriver:
 
     async def receive_resp(self):
         self.port_dict["out_ready"].value = 1
-        await self.dut.astep(1)
+        await self.dut.AStep(1)
         while self.port_dict["out_valid"].value != 1:
-            await self.dut.astep(1)
+            await self.dut.AStep(1)
         self.port_dict["out_ready"].value = 0
 
         if self.port_dict["out_cmd"].value == self.BusCMD.POP_OKAY.value:
@@ -56,7 +56,7 @@ class SinglePortDriver:
         await self.send_req(is_push)
         await self.receive_resp()
         for _ in range(random.randint(0, 5)):
-            await self.dut.astep(1)
+            await self.dut.AStep(1)
 
     async def main(self):
         for _ in range(10):
@@ -91,10 +91,10 @@ async def test_stack(stack):
 
     asyncio.create_task(port0.main())
     asyncio.create_task(port1.main())
-    await asyncio.create_task(dut.runstep(200))
+    await asyncio.create_task(dut.RunStep(200))
 
 if __name__ == "__main__":
     dut = DUTdual_port_stack()
-    dut.init_clock("clk")
+    dut.InitClock("clk")
     asyncio.run(test_stack(dut))
-    dut.finalize()
+    dut.Finish()
