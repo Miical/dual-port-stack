@@ -11,3 +11,5 @@ split_verilogs
 **/UT_*
 NemuBR/
 report/
+reports/
+bundle_code_gen.py
